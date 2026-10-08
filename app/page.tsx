@@ -333,7 +333,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h4 className="font-['Cinzel'] font-bold text-amber-200 text-sm">Confidencialidad 100%</h4>
-                  <p class="text-xs text-gray-400">Atención privada y código de reserva encriptado.</p>
+                  <p className="text-xs text-gray-400">Atención privada y código de reserva encriptado.</p>
                 </div>
               </div>
 
@@ -579,7 +579,7 @@ export default function Home() {
             <div className="bg-gradient-to-br from-[#1A112B]/70 to-[#0D0816]/85 backdrop-blur-md rounded-3xl p-8 sm:p-12 border border-amber-500/30 relative overflow-hidden">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
                 <div>
-                  <span class="text-xs font-semibold uppercase tracking-widest text-amber-400">Linaje Místico</span>
+                  <span className="text-xs font-semibold uppercase tracking-widest text-amber-400">Linaje Místico</span>
                   <h2 className="font-['Cinzel'] text-3xl sm:text-4xl font-bold text-white mt-2 mb-6">
                     Guardianes del Conocimiento Arcana & Sanación
                   </h2>
