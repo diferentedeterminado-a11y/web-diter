@@ -197,7 +197,7 @@ export default function Home() {
       `Adjunto comprobante o quedo a la espera de coordinar el horario de mi sesión.`;
 
     const encodedMsg = encodeURIComponent(message);
-    window.open(`https://wa.me/5491100000000?text=${encodedMsg}`, '_blank');
+    window.open(`https://wa.me/5492612738086?text=${encodedMsg}`, '_blank');
     setModalOpen(false);
   };
 
