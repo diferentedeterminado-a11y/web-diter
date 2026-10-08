@@ -837,7 +837,7 @@ export default function Home() {
 
           {/* BOTÓN FLOTANTE WHATSAPP */}
           <a
-            href="https://wa.me/5491100000000?text=Hola%20Grupo%20Diter,%20quisiera%20realizar%20una%20consulta%20espiritual."
+            href="https://wa.me/5492612738086?text=Hola%20Grupo%20Diter,%20quisiera%20realizar%20una%20consulta%20espiritual."
             target="_blank"
             rel="noopener noreferrer"
             className="fixed bottom-6 right-6 z-40 group flex items-center"
