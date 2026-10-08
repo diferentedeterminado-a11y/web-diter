@@ -670,7 +670,7 @@ export default function Home() {
                         required
                         value={custPhone}
                         onChange={(e) => setCustPhone(e.target.value)}
-                        placeholder="+54 9 11 1234 5678"
+                        placeholder="+54 9 2612738086"
                         className="w-full bg-purple-950/40 border border-amber-500/20 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-400"
                       />
                     </div>
