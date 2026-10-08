@@ -19,9 +19,9 @@ export default function Home() {
     limpiezas: { name: 'Limpieza Personal Profunda', price: 350000, index: 0 },
   });
 
-  // Estado del Modal de Checkout
+  // Estado del Modal de Checkout (Únicamente Mercado Pago y CBU/Transferencia)
   const [modalOpen, setModalOpen] = useState(false);
-  const [currentPaymentMethod, setCurrentPaymentMethod] = useState<'mp' | 'cbu' | 'wa'>('mp');
+  const [currentPaymentMethod, setCurrentPaymentMethod] = useState<'mp' | 'cbu'>('mp');
   const [selectedService, setSelectedService] = useState({
     title: '',
     variant: '',
@@ -223,7 +223,7 @@ export default function Home() {
         {/* Background Canvas Stars */}
         <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full pointer-events-none z-0" />
 
-        {/* Ambient Orbs - Opacidad reducida en mobile */}
+        {/* Ambient Orbs */}
         <div className="fixed top-1/4 left-10 w-72 md:w-96 h-72 md:h-96 bg-purple-900/15 rounded-full blur-[100px] pointer-events-none z-0" />
         <div className="fixed bottom-1/3 right-10 w-72 md:w-96 h-72 md:h-96 bg-amber-600/10 rounded-full blur-[120px] pointer-events-none z-0" />
 
@@ -352,7 +352,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h4 className="font-serif font-bold text-amber-200 text-sm">Múltiples Pagos</h4>
-                  <p className="text-xs text-gray-400">Mercado Pago, CBU/Alias o WhatsApp.</p>
+                  <p className="text-xs text-gray-400">Mercado Pago y Transferencia Bancaria.</p>
                 </div>
               </div>
             </div>
@@ -509,7 +509,7 @@ export default function Home() {
                   </div>
 
                   <p className="text-sm text-gray-300 mb-6 font-light leading-relaxed">
-                    Trabajos de alta dominación, retorno de pareja y endulzamientos. Requiere estrictamente evaluación previa obligatoria antes de iniciar el ritual.
+                    Trabajos de alta dominación, retorno de pareja y endulzamientos. Requiere strictly evaluación previa obligatoria antes de iniciar el ritual.
                   </p>
 
                   <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6 text-xs text-amber-200 flex gap-3 items-center">
@@ -688,48 +688,36 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* SELECCIÓN DE MÉTODO DE PAGO (SOLO MERCADO PAGO Y TRANSFERENCIA EN 2 COLUMNAS) */}
                 <div className="mb-6">
                   <label className="block text-xs uppercase tracking-wider text-amber-200/90 mb-3 font-semibold">
                     Selecciona el Método de Pago:
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => setCurrentPaymentMethod('mp')}
-                      className={`p-3 rounded-xl flex flex-col items-center justify-center text-center gap-1.5 transition border ${
+                      className={`p-3.5 rounded-xl flex flex-col items-center justify-center text-center gap-1.5 transition border ${
                         currentPaymentMethod === 'mp'
-                          ? 'border-sky-400 bg-sky-500/15'
+                          ? 'border-sky-400 bg-sky-500/15 shadow-[0_0_15px_rgba(0,158,227,0.25)]'
                           : 'border-amber-500/20 bg-[#120C1F]/60'
                       }`}
                     >
                       <i className="fa-solid fa-bolt text-sky-400 text-lg"></i>
-                      <span className="text-[11px] font-bold text-white leading-tight">Mercado Pago</span>
+                      <span className="text-xs font-bold text-white leading-tight">Mercado Pago</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setCurrentPaymentMethod('cbu')}
-                      className={`p-3 rounded-xl flex flex-col items-center justify-center text-center gap-1.5 transition border ${
+                      className={`p-3.5 rounded-xl flex flex-col items-center justify-center text-center gap-1.5 transition border ${
                         currentPaymentMethod === 'cbu'
-                          ? 'border-[#D4AF37] bg-amber-500/15'
+                          ? 'border-[#D4AF37] bg-amber-500/15 shadow-[0_0_15px_rgba(212,175,55,0.25)]'
                           : 'border-amber-500/20 bg-[#120C1F]/60'
                       }`}
                     >
                       <i className="fa-solid fa-building-columns text-amber-400 text-lg"></i>
-                      <span className="text-[11px] font-bold text-white leading-tight">Transferencia</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setCurrentPaymentMethod('wa')}
-                      className={`p-3 rounded-xl flex flex-col items-center justify-center text-center gap-1.5 transition border ${
-                        currentPaymentMethod === 'wa'
-                          ? 'border-emerald-400 bg-emerald-500/15'
-                          : 'border-amber-500/20 bg-[#120C1F]/60'
-                      }`}
-                    >
-                      <i className="fa-brands fa-whatsapp text-emerald-400 text-lg"></i>
-                      <span className="text-[11px] font-bold text-white leading-tight">WhatsApp</span>
+                      <span className="text-xs font-bold text-white leading-tight">Transferencia</span>
                     </button>
                   </div>
                 </div>
@@ -809,28 +797,6 @@ export default function Home() {
                     </button>
                   </div>
                 )}
-
-                {/* VISTA WHATSAPP */}
-                {currentPaymentMethod === 'wa' && (
-                  <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-4 text-xs text-emerald-100">
-                    <div className="flex items-center gap-2 mb-2 text-emerald-400 font-bold">
-                      <i className="fa-brands fa-whatsapp text-lg"></i>
-                      <span>Coordinación Directa con Guía Espiritual</span>
-                    </div>
-                    <p className="text-gray-300 font-light text-[11px] leading-relaxed mb-4">
-                      Si prefieres coordinar otros medios de pago o recibir atención personalizada antes de abonar, inicia la conversación directa.
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={() => confirmBookingViaWhatsApp('Coordinación Directa en WhatsApp')}
-                      className="w-full bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] py-3.5 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2"
-                    >
-                      <i className="fa-brands fa-whatsapp text-lg"></i>
-                      <span>Coordinar Turno por WhatsApp</span>
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -878,7 +844,6 @@ export default function Home() {
                 <ul className="space-y-2 text-xs text-gray-400">
                   <li className="flex items-center gap-2"><i className="fa-solid fa-bolt text-sky-400"></i> Mercado Pago</li>
                   <li className="flex items-center gap-2"><i className="fa-solid fa-building-columns text-amber-400"></i> Transferencia CBU / Alias</li>
-                  <li className="flex items-center gap-2"><i className="fa-brands fa-whatsapp text-emerald-400"></i> Coordinación Directa</li>
                 </ul>
               </div>
             </div>
