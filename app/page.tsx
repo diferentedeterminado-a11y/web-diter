@@ -321,7 +321,7 @@ export default function Home() {
                 className="border border-[#D4AF37] text-[#F5D77F] hover:bg-amber-500/10 px-8 py-4 rounded-xl text-sm font-bold tracking-widest uppercase flex items-center justify-center gap-3 transition"
               >
                 <i className="fa-solid fa-ankh text-lg"></i>
-                <span>Conocer Nuestro Culto</span>
+                <span>Conoce Sobre Nosotros </span>
               </a>
             </div>
 
