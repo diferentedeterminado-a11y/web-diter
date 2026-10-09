@@ -1,5 +1,5 @@
 'use client';
-
+import Testimonials from '@/components/Testimoniales';
 import React, { useState, useEffect, useRef } from 'react';
 import Script from 'next/script';
 
@@ -573,6 +573,8 @@ export default function Home() {
             </div>
           </section>
 
+{/* SECCIÓN TESTIMONIOS */}
+<Testimonials />
           {/* ABOUT US SECTION */}
           <section id="nosotros" className="py-16 md:py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full my-4 md:my-8">
             <div className="bg-[#1A112B]/80 backdrop-blur-sm rounded-3xl p-6 sm:p-12 border border-amber-500/30 relative overflow-hidden">
