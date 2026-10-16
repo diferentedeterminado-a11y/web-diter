@@ -2,11 +2,15 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
+
 import { getServiceById } from '@/lib/mercadopago/catalog';
 import { getDatabase } from '@/lib/neon';
 import { sendMetaPurchase } from '@/lib/meta/conversions';
 
-function verifySignature(request: Request, paymentId: string): boolean {
+function verifySignature(
+  request: Request,
+  paymentId: string
+): boolean {
   const secret = process.env.MP_WEBHOOK_SECRET;
   const signature = request.headers.get('x-signature');
   const requestId = request.headers.get('x-request-id');
@@ -15,14 +19,25 @@ function verifySignature(request: Request, paymentId: string): boolean {
     return false;
   }
 
-  const ts = signature.match(/(?:^|,)\s*ts=([^,]+)/)?.[1]?.trim();
-  const hash = signature.match(/(?:^|,)\s*v1=([a-fA-F0-9]+)/)?.[1]?.trim();
+  const ts = signature
+    .match(/(?:^|,)\s*ts=([^,]+)/)?.[1]
+    ?.trim();
 
-  if (!ts || !hash || !/^\d+$/.test(ts) || !/^[a-fA-F0-9]{64}$/.test(hash)) {
+  const hash = signature
+    .match(/(?:^|,)\s*v1=([a-fA-F0-9]+)/)?.[1]
+    ?.trim();
+
+  if (
+    !ts ||
+    !hash ||
+    !/^\d+$/.test(ts) ||
+    !/^[a-fA-F0-9]{64}$/.test(hash)
+  ) {
     return false;
   }
 
-  const manifest = `id:${paymentId};request-id:${requestId};ts:${ts};`;
+  const manifest =
+    `id:${paymentId};request-id:${requestId};ts:${ts};`;
 
   const expected = createHmac('sha256', secret)
     .update(manifest)
@@ -30,12 +45,15 @@ function verifySignature(request: Request, paymentId: string): boolean {
 
   const received = Buffer.from(hash, 'hex');
 
-  return received.length === expected.length &&
-    timingSafeEqual(received, expected);
+  return (
+    received.length === expected.length &&
+    timingSafeEqual(received, expected)
+  );
 }
 
 export async function POST(request: Request) {
   try {
+    // 1. Verificar autenticidad de Mercado Pago.
     const url = new URL(request.url);
     const paymentId = url.searchParams.get('data.id') ?? '';
 
@@ -55,10 +73,13 @@ export async function POST(request: Request) {
       );
     }
 
+    // 2. Consultar el pago directamente en Mercado Pago.
     const client = new MercadoPagoConfig({ accessToken });
     const paymentClient = new Payment(client);
 
-    const payment = await paymentClient.get({ id: paymentId });
+    const payment = await paymentClient.get({
+      id: paymentId,
+    });
 
     if (payment.status !== 'approved') {
       return NextResponse.json({
@@ -67,7 +88,50 @@ export async function POST(request: Request) {
       });
     }
 
-    const service = getServiceById(payment.external_reference);
+    // 3. Recuperar el checkout desde Neon.
+    const checkoutId = payment.external_reference;
+
+    if (!checkoutId) {
+      return NextResponse.json(
+        { error: 'El pago no tiene referencia de checkout.' },
+        { status: 422 }
+      );
+    }
+
+    const sql = getDatabase();
+
+    const checkouts = await sql`
+      SELECT
+        checkout_id,
+        preference_id,
+        service_id,
+        email_sha256,
+        meta_consent,
+        checkout_event_id
+      FROM mercadopago_checkouts
+      WHERE checkout_id = ${checkoutId}
+      LIMIT 1
+    `;
+
+    if (checkouts.length === 0) {
+      return NextResponse.json(
+        { error: 'Checkout no encontrado en Neon.' },
+        { status: 422 }
+      );
+    }
+
+    const checkout = checkouts[0];
+
+    // 4. Validar que el pago corresponde al checkout.
+    if (
+      !payment.order?.id &&
+      !payment.metadata?.checkout_id
+    ) {
+      // La ausencia de estos campos no invalida por sí sola
+      // un pago: external_reference es la referencia principal.
+    }
+
+    const service = getServiceById(checkout.service_id);
 
     if (
       !service ||
@@ -75,15 +139,17 @@ export async function POST(request: Request) {
       payment.currency_id !== service.currency
     ) {
       return NextResponse.json(
-        { error: 'El pago no coincide con el catálogo oficial.' },
+        {
+          error:
+            'El pago no coincide con el catálogo oficial.',
+        },
         { status: 422 }
       );
     }
 
-    const sql = getDatabase();
     const confirmedPaymentId = String(payment.id);
 
-    // Registrar el pago aprobado sin duplicarlo.
+    // 5. Registrar el pago sin duplicaciones.
     await sql`
       INSERT INTO mercadopago_payments (
         payment_id,
@@ -102,8 +168,17 @@ export async function POST(request: Request) {
       ON CONFLICT (payment_id) DO NOTHING
     `;
 
-    // Reclamar el envío para evitar ejecuciones simultáneas.
-    // Usamos un bloqueo temporal para permitir reintentos.
+    // 6. Respetar el consentimiento del cliente.
+    if (checkout.meta_consent !== true) {
+      return NextResponse.json({
+        received: true,
+        approved: true,
+        registered: true,
+        meta: 'skipped_no_consent',
+      });
+    }
+
+    // 7. Reclamar el envío para evitar duplicados.
     const claimed = await sql`
       UPDATE mercadopago_payments
       SET
@@ -129,13 +204,16 @@ export async function POST(request: Request) {
       });
     }
 
+    // 8. Enviar Purchase mediante Meta Conversions API.
     try {
       await sendMetaPurchase({
         paymentId: confirmedPaymentId,
         amount: payment.transaction_amount,
         currency: service.currency,
+        emailSha256: checkout.email_sha256 ?? undefined,
       });
 
+      // 9. Marcar el evento como enviado.
       await sql`
         UPDATE mercadopago_payments
         SET
@@ -152,8 +230,10 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       console.error(
-        'No se pudo completar el envío de Purchase a Meta:',
-        error instanceof Error ? error.message : 'Error desconocido'
+        'Error al enviar Purchase a Meta:',
+        error instanceof Error
+          ? error.message
+          : 'Error desconocido'
       );
 
       await sql`
@@ -165,16 +245,20 @@ export async function POST(request: Request) {
           AND meta_purchase_sent_at IS NULL
       `;
 
-      // Mercado Pago puede reintentar esta notificación.
       return NextResponse.json(
-        { error: 'Pago registrado, evento Meta pendiente de reintento.' },
+        {
+          error:
+            'Pago registrado. Purchase pendiente de reintento.',
+        },
         { status: 500 }
       );
     }
   } catch (error) {
     console.error(
-      'Error al procesar el webhook de Mercado Pago:',
-      error instanceof Error ? error.message : 'Error desconocido'
+      'Error en webhook de Mercado Pago:',
+      error instanceof Error
+        ? error.message
+        : 'Error desconocido'
     );
 
     return NextResponse.json(
