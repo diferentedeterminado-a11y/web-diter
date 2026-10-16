@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { getServiceById } from '@/lib/mercadopago/catalog';
 import { getDatabase } from '@/lib/neon';
-
+import { sendMetaPurchase } from '@/lib/meta/conversions';
 
 function verifySignature(request: Request, paymentId: string): boolean {
   const secret = process.env.MP_WEBHOOK_SECRET;
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
+
     const accessToken = process.env.MP_ACCESS_TOKEN;
 
     if (!accessToken) {
@@ -53,19 +54,19 @@ export async function POST(request: Request) {
         { status: 503 }
       );
     }
-    
+
     const client = new MercadoPagoConfig({ accessToken });
     const paymentClient = new Payment(client);
-    
+
     const payment = await paymentClient.get({ id: paymentId });
-    
+
     if (payment.status !== 'approved') {
       return NextResponse.json({
         received: true,
-        approved: false
+        approved: false,
       });
     }
-    
+
     const service = getServiceById(payment.external_reference);
 
     if (
@@ -78,13 +79,12 @@ export async function POST(request: Request) {
         { status: 422 }
       );
     }
-    
-    
-    // Pago aprobado y validado contra el catálogo.
-    // Registrar en Neon sin duplicar el mismo payment_id.
-    const sql = getDatabase();
 
-    const result = await sql`
+    const sql = getDatabase();
+    const confirmedPaymentId = String(payment.id);
+
+    // Registrar el pago aprobado sin duplicarlo.
+    await sql`
       INSERT INTO mercadopago_payments (
         payment_id,
         service_id,
@@ -93,28 +93,93 @@ export async function POST(request: Request) {
         status
       )
       VALUES (
-        ${String(payment.id)},
+        ${confirmedPaymentId},
         ${service.id},
         ${payment.transaction_amount},
         ${service.currency},
         'approved'
       )
       ON CONFLICT (payment_id) DO NOTHING
+    `;
+
+    // Reclamar el envío para evitar ejecuciones simultáneas.
+    // Usamos un bloqueo temporal para permitir reintentos.
+    const claimed = await sql`
+      UPDATE mercadopago_payments
+      SET
+        status = 'sending_meta',
+        updated_at = NOW()
+      WHERE payment_id = ${confirmedPaymentId}
+        AND meta_purchase_sent_at IS NULL
+        AND (
+          status = 'approved'
+          OR (
+            status = 'sending_meta'
+            AND updated_at < NOW() - INTERVAL '5 minutes'
+          )
+        )
       RETURNING payment_id
     `;
 
-    return NextResponse.json({
-      received: true,
-      approved: true,
-      registered: result.length > 0,
-    });
+    if (claimed.length === 0) {
+      return NextResponse.json({
+        received: true,
+        approved: true,
+        meta: 'already_sent_or_processing',
+      });
+    }
 
+    try {
+      await sendMetaPurchase({
+        paymentId: confirmedPaymentId,
+        amount: payment.transaction_amount,
+        currency: service.currency,
+      });
 
-    
-  } catch {
+      await sql`
+        UPDATE mercadopago_payments
+        SET
+          status = 'approved',
+          meta_purchase_sent_at = NOW(),
+          updated_at = NOW()
+        WHERE payment_id = ${confirmedPaymentId}
+      `;
+
+      return NextResponse.json({
+        received: true,
+        approved: true,
+        meta: 'sent',
+      });
+    } catch (error) {
+      console.error(
+        'No se pudo completar el envío de Purchase a Meta:',
+        error instanceof Error ? error.message : 'Error desconocido'
+      );
+
+      await sql`
+        UPDATE mercadopago_payments
+        SET
+          status = 'approved',
+          updated_at = NOW()
+        WHERE payment_id = ${confirmedPaymentId}
+          AND meta_purchase_sent_at IS NULL
+      `;
+
+      // Mercado Pago puede reintentar esta notificación.
+      return NextResponse.json(
+        { error: 'Pago registrado, evento Meta pendiente de reintento.' },
+        { status: 500 }
+      );
+    }
+  } catch (error) {
+    console.error(
+      'Error al procesar el webhook de Mercado Pago:',
+      error instanceof Error ? error.message : 'Error desconocido'
+    );
+
     return NextResponse.json(
       { error: 'Error al procesar la notificación.' },
-      { status: 400 }
+      { status: 500 }
     );
   }
 }
