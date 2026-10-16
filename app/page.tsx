@@ -2,6 +2,13 @@
 import Testimonials from '@/components/Testimoniales';
 import React, { useState, useEffect, useRef } from 'react';
 import Script from 'next/script';
+import {
+  LECTURA_SERVICES,
+  LIMPIEZA_SERVICES,
+  type ServiceId,
+} from '@/lib/mercadopago/catalog';
+import { createMetaEventId } from '@/lib/meta/event-id';
+import { trackInitiateCheckout, trackViewContent } from '@/lib/meta/pixel';
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -15,14 +22,30 @@ export default function Home() {
 
   // Variantes seleccionadas por categoría
   const [variants, setVariants] = useState({
-    lecturas: { name: '3 Preguntas Directas', price: 20000, index: 0 },
-    limpiezas: { name: 'Limpieza Personal Profunda', price: 350000, index: 0 },
+    lecturas: {
+      id: LECTURA_SERVICES[0].id,
+      name: LECTURA_SERVICES[0].variant,
+      price: LECTURA_SERVICES[0].unitPrice,
+      index: 0,
+    },
+    limpiezas: {
+      id: LIMPIEZA_SERVICES[0].id,
+      name: LIMPIEZA_SERVICES[0].variant,
+      price: LIMPIEZA_SERVICES[0].unitPrice,
+      index: 0,
+    },
   });
 
   // Estado del Modal de Checkout (Únicamente Mercado Pago y CBU/Transferencia)
   const [modalOpen, setModalOpen] = useState(false);
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<'mp' | 'cbu'>('mp');
-  const [selectedService, setSelectedService] = useState({
+  const [selectedService, setSelectedService] = useState<{
+    id: ServiceId | '';
+    title: string;
+    variant: string;
+    price: number;
+  }>({
+    id: '',
     title: '',
     variant: '',
     price: 0,
@@ -33,6 +56,7 @@ export default function Home() {
   const [custPhone, setCustPhone] = useState('');
   const [custEmail, setCustEmail] = useState('');
   const [loadingMp, setLoadingMp] = useState(false);
+  const checkoutInFlightRef = useRef(false);
 
   // Animación del Canvas Cosmos (Optimizado para Mobile)
   useEffect(() => {
@@ -125,19 +149,26 @@ export default function Home() {
   const handleSelectVariant = (
     category: 'lecturas' | 'limpiezas',
     index: number,
+    id: ServiceId,
     name: string,
     price: number
   ) => {
     setVariants((prev) => ({
       ...prev,
-      [category]: { name, price, index },
+      [category]: { id, name, price, index },
     }));
   };
 
-  const openCheckoutModal = (title: string, variantName: string, price: number) => {
-    setSelectedService({ title, variant: variantName, price });
+  const openCheckoutModal = (
+    serviceId: ServiceId,
+    title: string,
+    variantName: string,
+    price: number
+  ) => {
+    setSelectedService({ id: serviceId, title, variant: variantName, price });
     setCurrentPaymentMethod('mp');
     setModalOpen(true);
+    trackViewContent(serviceId);
   };
 
   const handleMercadoPagoPayment = async () => {
@@ -150,31 +181,50 @@ export default function Home() {
       return;
     }
 
+    if (!selectedService.id) {
+      alert('Ocurrió un error al generar el cobro en Mercado Pago.');
+      return;
+    }
+
+    if (checkoutInFlightRef.current || loadingMp) {
+      return;
+    }
+
+    checkoutInFlightRef.current = true;
     setLoadingMp(true);
+
+    const eventId = createMetaEventId();
 
     try {
       const res = await fetch('/api/mercadopago', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: `${selectedService.title} - ${selectedService.variant}`,
-          price: selectedService.price,
+          serviceId: selectedService.id,
           name: custName,
           email: custEmail,
+          eventId,
         }),
       });
 
       const data = await res.json();
 
       if (data.init_point) {
+        try {
+          trackInitiateCheckout(selectedService.id, eventId);
+        } catch {
+          // Continuar la redirección aunque el Pixel falle o esté bloqueado.
+        }
         window.location.href = data.init_point;
       } else {
         alert('Ocurrió un error al generar el cobro en Mercado Pago.');
+        checkoutInFlightRef.current = false;
         setLoadingMp(false);
       }
     } catch (error) {
       console.error(error);
       alert('Error de conexión con el servidor.');
+      checkoutInFlightRef.current = false;
       setLoadingMp(false);
     }
   };
@@ -391,24 +441,21 @@ export default function Home() {
                       Selecciona el formato de tu consulta:
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {[
-                        { name: '3 Preguntas Directas', price: 20000 },
-                        { name: '6 Preguntas Profundas', price: 40000 },
-                        { name: '10 Preguntas Exclusivas', price: 60000 },
-                        { name: 'Llamada 45 min (Ilimitadas)', price: 100000 },
-                      ].map((item, idx) => (
+                      {LECTURA_SERVICES.map((item, idx) => (
                         <button
-                          key={idx}
+                          key={item.id}
                           type="button"
-                          onClick={() => handleSelectVariant('lecturas', idx, item.name, item.price)}
+                          onClick={() =>
+                            handleSelectVariant('lecturas', idx, item.id, item.variant, item.unitPrice)
+                          }
                           className={`p-3 rounded-xl text-left flex justify-between items-center text-xs border transition ${
                             variants.lecturas.index === idx
                               ? 'border-[#D4AF37] bg-amber-500/15'
                               : 'border-amber-500/20 bg-white/5 hover:border-amber-500/60'
                           }`}
                         >
-                          <span className="font-medium text-gray-200">{item.name}</span>
-                          <span className="font-bold text-amber-300">${item.price.toLocaleString('es-AR')}</span>
+                          <span className="font-medium text-gray-200">{item.variant}</span>
+                          <span className="font-bold text-amber-300">${item.unitPrice.toLocaleString('es-AR')}</span>
                         </button>
                       ))}
                     </div>
@@ -423,7 +470,14 @@ export default function Home() {
                     </span>
                   </div>
                   <button
-                    onClick={() => openCheckoutModal('Lecturas y Videncias', variants.lecturas.name, variants.lecturas.price)}
+                    onClick={() =>
+                      openCheckoutModal(
+                        variants.lecturas.id,
+                        'Lecturas y Videncias',
+                        variants.lecturas.name,
+                        variants.lecturas.price
+                      )
+                    }
                     className="w-full sm:w-auto bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-6 py-3 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2"
                   >
                     <span>Reservar Turno / Comprar</span>
@@ -454,24 +508,21 @@ export default function Home() {
                       Modalidad de Limpieza:
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {[
-                        { name: 'Limpieza Personal Profunda', price: 350000 },
-                        { name: 'Limpieza Hogar Espiritual', price: 450000 },
-                        { name: 'Limpieza Empresarial (Llamada)', price: 65000 },
-                        { name: 'Grupales (Viernes)', price: 20000 },
-                      ].map((item, idx) => (
+                      {LIMPIEZA_SERVICES.map((item, idx) => (
                         <button
-                          key={idx}
+                          key={item.id}
                           type="button"
-                          onClick={() => handleSelectVariant('limpiezas', idx, item.name, item.price)}
+                          onClick={() =>
+                            handleSelectVariant('limpiezas', idx, item.id, item.variant, item.unitPrice)
+                          }
                           className={`p-3 rounded-xl text-left flex justify-between items-center text-xs border transition ${
                             variants.limpiezas.index === idx
                               ? 'border-[#D4AF37] bg-amber-500/15'
                               : 'border-amber-500/20 bg-white/5 hover:border-amber-500/60'
                           }`}
                         >
-                          <span className="font-medium text-gray-200">{item.name}</span>
-                          <span className="font-bold text-amber-300">${item.price.toLocaleString('es-AR')}</span>
+                          <span className="font-medium text-gray-200">{item.variant}</span>
+                          <span className="font-bold text-amber-300">${item.unitPrice.toLocaleString('es-AR')}</span>
                         </button>
                       ))}
                     </div>
@@ -486,7 +537,14 @@ export default function Home() {
                     </span>
                   </div>
                   <button
-                    onClick={() => openCheckoutModal('Limpiezas Energéticas', variants.limpiezas.name, variants.limpiezas.price)}
+                    onClick={() =>
+                      openCheckoutModal(
+                        variants.limpiezas.id,
+                        'Limpiezas Energéticas',
+                        variants.limpiezas.name,
+                        variants.limpiezas.price
+                      )
+                    }
                     className="w-full sm:w-auto bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-6 py-3 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2"
                   >
                     <span>Reservar Turno / Comprar</span>
@@ -524,7 +582,14 @@ export default function Home() {
                     <span className="font-serif text-2xl font-bold text-amber-400">$60.000 ARS</span>
                   </div>
                   <button
-                    onClick={() => openCheckoutModal('Amarres de Amor', 'Consulta Previa de Evaluación', 60000)}
+                    onClick={() =>
+                      openCheckoutModal(
+                        'amarres-consulta-previa',
+                        'Amarres de Amor',
+                        'Consulta Previa de Evaluación',
+                        60000
+                      )
+                    }
                     className="w-full sm:w-auto bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-6 py-3 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2"
                   >
                     <span>Agendar Consulta Previa</span>
@@ -562,7 +627,14 @@ export default function Home() {
                     <span className="font-serif text-2xl font-bold text-amber-400">$80.000 ARS</span>
                   </div>
                   <button
-                    onClick={() => openCheckoutModal('Exorcismos y Liberación Espiritual', 'Llamada Previa para Evaluación', 80000)}
+                    onClick={() =>
+                      openCheckoutModal(
+                        'exorcismos-llamada-evaluacion',
+                        'Exorcismos y Liberación Espiritual',
+                        'Llamada Previa para Evaluación',
+                        80000
+                      )
+                    }
                     className="w-full sm:w-auto bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-6 py-3 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2"
                   >
                     <span>Solicitar Evaluación</span>
