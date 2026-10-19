@@ -1,5 +1,7 @@
 'use client';
 import Testimonials from '@/components/Testimoniales';
+import { LecturasCheckout } from '@/components/lecturas/LecturasCheckout';
+import { MercadoPagoLogo } from '@/components/lecturas/MercadoPagoLogo';
 import React, { useState, useEffect, useRef } from 'react';
 import Script from 'next/script';
 import {
@@ -9,6 +11,14 @@ import {
 } from '@/lib/mercadopago/catalog';
 import { createMetaEventId } from '@/lib/meta/event-id';
 import { trackInitiateCheckout, trackViewContent } from '@/lib/meta/pixel';
+import { hasMetaConsent } from '@/lib/meta/consent';
+import { isLecturaServiceId } from '@/lib/lecturas/services';
+import {
+  CALL_PENDING_MESSAGE,
+  CALL_RESCHEDULE_MESSAGE,
+  PAYMENT_RECEIVED_MESSAGE,
+  QUESTION_PENDING_MESSAGE,
+} from '@/lib/lecturas/return-status';
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -19,6 +29,7 @@ export default function Home() {
   // Estados de Toast
   const [toastMsg, setToastMsg] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [returnBanner, setReturnBanner] = useState('');
 
   // Variantes seleccionadas por categoría
   const [variants, setVariants] = useState({
@@ -38,6 +49,7 @@ export default function Home() {
 
   // Estado del Modal de Checkout (Únicamente Mercado Pago y CBU/Transferencia)
   const [modalOpen, setModalOpen] = useState(false);
+  const [lecturasOpen, setLecturasOpen] = useState(false);
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<'mp' | 'cbu'>('mp');
   const [selectedService, setSelectedService] = useState<{
     id: ServiceId | '';
@@ -141,6 +153,91 @@ export default function Home() {
     setTimeout(() => setShowToast(false), 3000);
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+    const reference = params.get('external_reference') ?? '';
+    const checkoutId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reference)
+      ? reference
+      : '';
+    let timer = 0;
+    let cancelled = false;
+
+    if (status === 'success') {
+      sessionStorage.removeItem('diter-lectura-draft-v1');
+    }
+
+    const showTemporary = (message: string) => {
+      if (!message || cancelled) {
+        return;
+      }
+      setReturnBanner('');
+      setToastMsg(message);
+      setShowToast(true);
+      timer = window.setTimeout(() => setShowToast(false), 3000);
+    };
+
+    const showPersistent = (message: string) => {
+      if (cancelled) {
+        return;
+      }
+      window.clearTimeout(timer);
+      setShowToast(false);
+      setReturnBanner(message);
+    };
+
+    const fallback =
+      status === 'success'
+        ? PAYMENT_RECEIVED_MESSAGE
+        : status === 'pending'
+          ? 'El pago quedó pendiente de confirmación.'
+          : status === 'failure'
+            ? 'El pago no se completó. Tus preguntas siguen guardadas.'
+            : '';
+
+    const poll = async (attempt: number) => {
+      try {
+        const response = await fetch(`/api/lecturas/fulfillment?checkoutId=${checkoutId}`, { cache: 'no-store' });
+        const data = await response.json() as { fulfillment?: string; service?: string | null };
+        if (cancelled) {
+          return;
+        }
+        if (data.fulfillment === 'reschedule') {
+          showPersistent(CALL_RESCHEDULE_MESSAGE);
+          return;
+        }
+        if (data.fulfillment === 'received' || data.fulfillment === 'unknown') {
+          showTemporary(PAYMENT_RECEIVED_MESSAGE);
+          return;
+        }
+        if (data.fulfillment === 'pending' && attempt < 7) {
+          timer = window.setTimeout(() => {
+            void poll(attempt + 1);
+          }, 2000);
+          return;
+        }
+        if (data.fulfillment === 'pending' && data.service === 'call') {
+          showPersistent(CALL_PENDING_MESSAGE);
+          return;
+        }
+        showTemporary(data.fulfillment === 'pending' ? QUESTION_PENDING_MESSAGE : PAYMENT_RECEIVED_MESSAGE);
+      } catch {
+        showTemporary(PAYMENT_RECEIVED_MESSAGE);
+      }
+    };
+
+    if (status === 'success' && checkoutId) {
+      void poll(0);
+    } else if (fallback) {
+      showTemporary(fallback);
+    }
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     triggerToast(`${label} copiado con éxito`);
@@ -204,6 +301,7 @@ export default function Home() {
           name: custName,
           email: custEmail,
           eventId,
+          metaConsent: hasMetaConsent(),
         }),
       });
 
@@ -269,6 +367,14 @@ export default function Home() {
           <i className="fa-solid fa-circle-check text-lg"></i>
           <span>{toastMsg}</span>
         </div>
+        {returnBanner ? (
+          <div role="status" className="fixed top-5 left-1/2 z-50 w-[min(40rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-amber-300 bg-amber-100 px-5 py-4 text-sm font-semibold leading-relaxed text-slate-950 shadow-[0_0_25px_rgba(212,175,55,0.35)]">
+            <p>{returnBanner}</p>
+            <button type="button" onClick={() => setReturnBanner('')} className="mt-3 text-xs font-bold uppercase tracking-wider text-slate-800">
+              Cerrar
+            </button>
+          </div>
+        ) : null}
 
         {/* Background Canvas Stars */}
         <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full pointer-events-none z-0" />
@@ -424,7 +530,7 @@ export default function Home() {
                 <div>
                   <div className="flex justify-between items-start mb-6">
                     <div>
-                      <span className="text-xs font-semibold uppercase tracking-widest text-purple-400">Lecturas del Oráculo</span>
+                      <span className="text-xs font-semibold uppercase tracking-widest text-purple-400">Lecturas vinculares</span>
                       <h4 className="font-serif text-2xl font-bold text-white mt-1">Lecturas y Videncias</h4>
                     </div>
                     <div className="w-12 h-12 rounded-xl bg-purple-900/40 border border-amber-500/30 flex items-center justify-center text-amber-400 text-2xl shrink-0">
@@ -433,7 +539,7 @@ export default function Home() {
                   </div>
 
                   <p className="text-sm text-gray-300 mb-6 font-light leading-relaxed">
-                    Revela tu destino, destraba incertidumbres y recibe respuestas directas sobre amor, trabajo, salud o senderos ocultos a través de clarividencia pura.
+                    Explorá tus inquietudes sobre el amor, las relaciones y tu camino personal mediante nuestras lecturas de tarot y videncia. Elegí la modalidad que prefieras y recibí orientación personalizada.
                   </p>
 
                   <div className="mb-6">
@@ -459,6 +565,9 @@ export default function Home() {
                         </button>
                       ))}
                     </div>
+                    <p className="mt-4 text-sm font-light leading-relaxed text-purple-100/80">
+                      Elegí la cantidad de preguntas que querés realizar. Nuestro equipo realizará una lectura de tarot y videncia y te enviará las respuestas por correo electrónico.
+                    </p>
                   </div>
                 </div>
 
@@ -470,17 +579,10 @@ export default function Home() {
                     </span>
                   </div>
                   <button
-                    onClick={() =>
-                      openCheckoutModal(
-                        variants.lecturas.id,
-                        'Lecturas y Videncias',
-                        variants.lecturas.name,
-                        variants.lecturas.price
-                      )
-                    }
+                    onClick={() => setLecturasOpen(true)}
                     className="w-full sm:w-auto bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-6 py-3 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2"
                   >
-                    <span>Reservar Turno / Comprar</span>
+                    <span>Continuar con mi lectura</span>
                     <i className="fa-solid fa-arrow-right"></i>
                   </button>
                 </div>
@@ -678,7 +780,7 @@ export default function Home() {
                       <div className="text-center p-6">
                         <i className="fa-solid fa-moon text-4xl sm:text-5xl text-amber-300 mb-4 block"></i>
                         <span className="font-serif text-base sm:text-lg font-bold text-white uppercase block">Grupo Diter</span>
-                        <span className="text-xs text-amber-200/80 italic">"Luz donde reina la sombra"</span>
+                        <span className="text-xs text-amber-200/80 italic">{'"Luz donde reina la sombra"'}</span>
                       </div>
                     </div>
                   </div>
@@ -686,6 +788,16 @@ export default function Home() {
               </div>
             </div>
           </section>
+
+          {lecturasOpen && isLecturaServiceId(variants.lecturas.id) && (
+            <LecturasCheckout
+              serviceId={variants.lecturas.id}
+              label={variants.lecturas.name}
+              price={variants.lecturas.price}
+              onClose={() => setLecturasOpen(false)}
+              onToast={triggerToast}
+            />
+          )}
 
           {/* MODAL CHECKOUT EXTENDED */}
           {modalOpen && (
@@ -777,7 +889,7 @@ export default function Home() {
                           : 'border-amber-500/20 bg-[#120C1F]/60'
                       }`}
                     >
-                      <i className="fa-solid fa-bolt text-sky-400 text-lg"></i>
+                      <MercadoPagoLogo />
                       <span className="text-xs font-bold text-white leading-tight">Mercado Pago</span>
                     </button>
 
@@ -801,7 +913,7 @@ export default function Home() {
                   <div className="bg-sky-950/30 border border-sky-500/30 rounded-2xl p-4 text-xs text-sky-100">
                     <div className="flex items-center gap-2 mb-2 text-sky-400 font-bold">
                       <i className="fa-solid fa-shield-halved"></i>
-                      <span>Pasarela Oficial de Mercado Pago</span>
+                      <span>Pago procesado por Mercado Pago</span>
                     </div>
                     <p className="text-gray-300 font-light text-[11px] leading-relaxed mb-4">
                       Serás redirigido de forma segura a Mercado Pago para abonar con Tarjeta de Crédito, Débito o dinero en tu cuenta.

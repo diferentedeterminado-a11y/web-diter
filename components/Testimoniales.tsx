@@ -60,7 +60,7 @@ export default function Testimonials() {
               </div>
 
               <p className="text-sm text-gray-300 italic mb-6 leading-relaxed font-light">
-                "{item.comment}"
+                &quot;{item.comment}&quot;
               </p>
             </div>
 

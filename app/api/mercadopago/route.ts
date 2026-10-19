@@ -1,15 +1,10 @@
 
 import { randomUUID, createHash } from 'node:crypto';
-import { MercadoPagoConfig, Preference } from 'mercadopago';
-
-import {
-  getPreferenceTitle,
-  getServiceById,
-} from '@/lib/mercadopago/catalog';
+import { getServiceById } from '@/lib/mercadopago/catalog';
+import { createServicePreference } from '@/lib/mercadopago/preference';
+import { isLecturaServiceId } from '@/lib/lecturas/services';
 
 import { getDatabase } from '@/lib/neon';
-
-const SITE_URL = 'https://web-diter.vercel.app';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
@@ -67,6 +62,13 @@ export async function POST(request: Request) {
       typeof data.serviceId === 'string'
         ? data.serviceId
         : '';
+
+    if (isLecturaServiceId(serviceId)) {
+      return Response.json(
+        { error: 'Las lecturas se inician desde su checkout.' },
+        { status: 400 },
+      );
+    }
 
     const name =
       typeof data.name === 'string'
@@ -131,56 +133,15 @@ export async function POST(request: Request) {
       : null;
 
     // 5. Crear la preferencia en Mercado Pago.
-    const client = new MercadoPagoConfig({
+    // El precio sale del catálogo del servidor, no del cliente.
+    const result = await createServicePreference({
       accessToken,
+      checkoutId,
+      service,
+      name,
+      email,
+      eventId,
     });
-
-    const preference = new Preference(client);
-
-    const result = await preference.create({
-      body: {
-        items: [
-          {
-            id: service.id,
-            title: getPreferenceTitle(service),
-            quantity: 1,
-            unit_price: service.unitPrice,
-            currency_id: service.currency,
-          },
-        ],
-
-        payer: {
-          name,
-          email,
-        },
-
-        back_urls: {
-          success: `${SITE_URL}/?status=success`,
-          failure: `${SITE_URL}/?status=failure`,
-          pending: `${SITE_URL}/?status=pending`,
-        },
-
-        auto_return: 'approved',
-
-        // Relaciona el pago con su checkout en Neon.
-        external_reference: checkoutId,
-
-        metadata: {
-          service_id: service.id,
-          checkout_id: checkoutId,
-          ...(eventId
-            ? { initiate_checkout_event_id: eventId }
-            : {}),
-        },
-      },
-    });
-
-    // 6. Validar la respuesta de Mercado Pago.
-    if (!result.id || !result.init_point) {
-      throw new Error(
-        'Mercado Pago no devolvió una preferencia válida.',
-      );
-    }
 
     // 7. Registrar el checkout en Neon.
     const sql = getDatabase();
@@ -196,7 +157,7 @@ export async function POST(request: Request) {
       )
       VALUES (
         ${checkoutId},
-        ${result.id},
+        ${result.preferenceId},
         ${service.id},
         ${emailSha256},
         ${metaConsent},
@@ -206,7 +167,7 @@ export async function POST(request: Request) {
 
     // 8. Devolver la URL del checkout al frontend.
     return Response.json({
-      init_point: result.init_point,
+      init_point: result.initPoint,
     });
   } catch (error) {
     console.error(

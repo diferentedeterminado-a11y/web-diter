@@ -6,6 +6,8 @@ import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { getServiceById } from '@/lib/mercadopago/catalog';
 import { getDatabase } from '@/lib/neon';
 import { sendMetaPurchase } from '@/lib/meta/conversions';
+import { scheduleLecturaQuestionNotice } from '@/lib/lecturas/notifications';
+import { applyLecturaPayment, isUndefinedLecturaSchema } from '@/lib/lecturas/store';
 
 function verifySignature(
   request: Request,
@@ -51,6 +53,31 @@ function verifySignature(
   );
 }
 
+const CHECKOUT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function syncLecturaPayment(checkoutId: string, mpStatus: string, paymentId: string): Promise<void> {
+  if (!CHECKOUT_UUID.test(checkoutId) || !/^[A-Za-z0-9_-]{1,80}$/.test(paymentId)) {
+    return;
+  }
+
+  try {
+    const result = await applyLecturaPayment(checkoutId, mpStatus, paymentId);
+    if (result === 'incident') {
+      console.error('Pago de lectura aprobado sin horario disponible:', checkoutId);
+    }
+    if (result === 'approved' || result === 'confirmed' || result === 'incident') {
+      await scheduleLecturaQuestionNotice(checkoutId, result);
+    }
+  } catch (error) {
+    if (isUndefinedLecturaSchema(error)) {
+      console.error('Tablas de lecturas todavía no migradas.');
+      return;
+    }
+
+    throw error;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     // 1. Verificar autenticidad de Mercado Pago.
@@ -82,6 +109,14 @@ export async function POST(request: Request) {
     });
 
     if (payment.status !== 'approved') {
+      if (payment.external_reference && payment.id) {
+        await syncLecturaPayment(
+          String(payment.external_reference),
+          payment.status ?? 'pending',
+          String(payment.id),
+        );
+      }
+
       return NextResponse.json({
         received: true,
         approved: false,
@@ -167,6 +202,10 @@ export async function POST(request: Request) {
       )
       ON CONFLICT (payment_id) DO NOTHING
     `;
+
+    if (checkout.checkout_id && payment.id) {
+      await syncLecturaPayment(String(checkout.checkout_id), 'approved', String(payment.id));
+    }
 
     // 6. Respetar el consentimiento del cliente.
     if (checkout.meta_consent !== true) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import {
   readMetaConsent,
   subscribeMetaConsent,
@@ -9,15 +9,31 @@ import {
 } from '@/lib/meta/consent';
 import MetaPixel from '@/components/meta/MetaPixel';
 
-export default function ConsentBanner() {
-  const [consent, setConsent] = useState<MetaConsentStatus | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+function subscribeConsent(onStoreChange: () => void): () => void {
+  return subscribeMetaConsent(() => onStoreChange());
+}
 
-  useEffect(() => {
-    setConsent(readMetaConsent());
-    setHydrated(true);
-    return subscribeMetaConsent(setConsent);
-  }, []);
+function serverConsent(): MetaConsentStatus | null {
+  return null;
+}
+
+function subscribeHydration(): () => void {
+  return () => undefined;
+}
+
+function clientHydrated(): boolean {
+  return true;
+}
+
+function serverHydrated(): boolean {
+  return false;
+}
+
+export default function ConsentBanner() {
+  const storedConsent = useSyncExternalStore(subscribeConsent, readMetaConsent, serverConsent);
+  const hydrated = useSyncExternalStore(subscribeHydration, clientHydrated, serverHydrated);
+  const [choice, setChoice] = useState<MetaConsentStatus | null>(null);
+  const consent = choice ?? storedConsent;
 
   const consentGranted = consent === 'granted';
 
@@ -35,7 +51,7 @@ export default function ConsentBanner() {
                 type="button"
                 onClick={() => {
                   writeMetaConsent('denied');
-                  setConsent('denied');
+                  setChoice('denied');
                 }}
                 className="px-3 py-2 rounded-xl text-[11px] uppercase tracking-wider border border-amber-500/20 text-gray-300"
               >
@@ -45,7 +61,7 @@ export default function ConsentBanner() {
                 type="button"
                 onClick={() => {
                   writeMetaConsent('granted');
-                  setConsent('granted');
+                  setChoice('granted');
                 }}
                 className="px-3 py-2 rounded-xl text-[11px] uppercase tracking-wider font-semibold bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813]"
               >
