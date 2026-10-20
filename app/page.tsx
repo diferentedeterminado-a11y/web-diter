@@ -949,24 +949,28 @@ export default function Home() {
                     </div>
 
                     <div className="space-y-2 bg-purple-950/70 p-3.5 rounded-xl border border-amber-500/20 text-[11px]">
-                      <div className="flex justify-between items-center py-1 border-b border-purple-900/50">
+                      <div className="flex justify-between items-center gap-3 py-1 border-b border-purple-900/50">
                         <span className="text-gray-400">Titular:</span>
-                        <span className="font-semibold text-white">Grupo Diter Espiritual S.A.</span>
+                        <span className="font-semibold text-white text-right">Pablo Antonio Guzman Gomez</span>
                       </div>
-                      <div className="flex justify-between items-center py-1 border-b border-purple-900/50">
-                        <span className="text-gray-400">CBU:</span>
+                      <div className="flex justify-between items-center gap-3 py-1 border-b border-purple-900/50">
+                        <span className="text-gray-400">Banco:</span>
+                        <span className="font-semibold text-white text-right">Macro</span>
+                      </div>
+                      <div className="flex justify-between items-center gap-3 py-1 border-b border-purple-900/50">
+                        <span className="text-gray-400">CVU/CBU:</span>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-amber-300">0000003100084930291048</span>
-                          <button type="button" onClick={() => copyToClipboard('0000003100084930291048', 'CBU')} className="text-amber-400 hover:text-white">
+                          <span className="font-mono text-amber-300 break-all text-right">2850408140096168058568</span>
+                          <button type="button" onClick={() => copyToClipboard('2850408140096168058568', 'CVU/CBU')} className="text-amber-400 hover:text-white" aria-label="Copiar CVU/CBU">
                             <i className="fa-regular fa-copy"></i>
                           </button>
                         </div>
                       </div>
-                      <div className="flex justify-between items-center py-1">
+                      <div className="flex justify-between items-center gap-3 py-1">
                         <span className="text-gray-400">ALIAS:</span>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-amber-300">GRUPO.DITER.MP</span>
-                          <button type="button" onClick={() => copyToClipboard('GRUPO.DITER.MP', 'ALIAS')} className="text-amber-400 hover:text-white">
+                          <span className="font-mono font-bold text-amber-300 break-all text-right">OBEDEZCO.ROSCA.VOCAL</span>
+                          <button type="button" onClick={() => copyToClipboard('OBEDEZCO.ROSCA.VOCAL', 'ALIAS')} className="text-amber-400 hover:text-white" aria-label="Copiar alias">
                             <i className="fa-regular fa-copy"></i>
                           </button>
                         </div>

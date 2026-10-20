@@ -220,6 +220,11 @@ export function LecturasCheckout({
     return Object.keys(nextErrors).length === 0;
   };
 
+  const copyBankDetail = (value: string, label: string) => {
+    navigator.clipboard.writeText(value);
+    onToast(`${label} copiado con éxito`);
+  };
+
   const submit = async (method: 'mp' | 'cbu') => {
     setNotice('');
     if (submitting || !validate()) {
@@ -427,17 +432,31 @@ export function LecturasCheckout({
               <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-200">Pendiente de validación</span>
             </div>
             <div className="space-y-2 rounded-xl border border-amber-500/20 bg-purple-950/70 p-3.5 text-[11px]">
-              <div className="flex items-center justify-between border-b border-purple-900/50 py-1">
+              <div className="flex items-center justify-between gap-3 border-b border-purple-900/50 py-1">
                 <span className="text-gray-400">Titular</span>
-                <span className="font-semibold text-white">Grupo Diter Espiritual S.A.</span>
+                <span className="text-right font-semibold text-white">Pablo Antonio Guzman Gomez</span>
               </div>
-              <div className="flex items-center justify-between gap-2 border-b border-purple-900/50 py-1">
-                <span className="text-gray-400">CBU</span>
-                <span className="font-mono text-amber-300">0000003100084930291048</span>
+              <div className="flex items-center justify-between gap-3 border-b border-purple-900/50 py-1">
+                <span className="text-gray-400">Banco</span>
+                <span className="text-right font-semibold text-white">Macro</span>
               </div>
-              <div className="flex items-center justify-between gap-2 py-1">
+              <div className="flex items-center justify-between gap-3 border-b border-purple-900/50 py-1">
+                <span className="text-gray-400">CVU/CBU</span>
+                <span className="flex items-center gap-2">
+                  <span className="break-all text-right font-mono text-amber-300">2850408140096168058568</span>
+                  <button type="button" onClick={() => copyBankDetail('2850408140096168058568', 'CVU/CBU')} className="text-amber-400 hover:text-white" aria-label="Copiar CVU/CBU">
+                    <i className="fa-regular fa-copy" />
+                  </button>
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-1">
                 <span className="text-gray-400">Alias</span>
-                <span className="font-mono font-bold text-amber-300">GRUPO.DITER.MP</span>
+                <span className="flex items-center gap-2">
+                  <span className="break-all text-right font-mono font-bold text-amber-300">OBEDEZCO.ROSCA.VOCAL</span>
+                  <button type="button" onClick={() => copyBankDetail('OBEDEZCO.ROSCA.VOCAL', 'Alias')} className="text-amber-400 hover:text-white" aria-label="Copiar alias">
+                    <i className="fa-regular fa-copy" />
+                  </button>
+                </span>
               </div>
             </div>
             <button type="button" disabled={submitting} onClick={() => submit('cbu')} className="mt-4 flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#B8860B] py-3.5 text-xs font-bold uppercase tracking-wider text-[#0B0813] disabled:opacity-60">
