@@ -317,14 +317,17 @@ export async function readLecturaPaymentStatus(checkoutId: string): Promise<stri
 export async function readLecturaFulfillment(checkoutId: string): Promise<{
   serviceId: string;
   paymentStatus: string;
+  paymentMethod: string;
   reservationStatus: string | null;
   openIncident: boolean;
+  paymentEventStatus: string | null;
 } | null> {
   const sql = getDatabase();
   const rows = await sql`
     SELECT
       service_id,
       payment_status,
+      payment_method,
       (
         SELECT reservation.status
         FROM lectura_reservations AS reservation
@@ -336,7 +339,14 @@ export async function readLecturaFulfillment(checkoutId: string): Promise<{
         WHERE incident.checkout_id = lectura_order.checkout_id
           AND incident.kind = 'paid_without_slot'
           AND incident.status = 'open'
-      ) AS open_incident
+      ) AS open_incident,
+      (
+        SELECT payment_event.status
+        FROM lectura_payment_events AS payment_event
+        WHERE payment_event.checkout_id = lectura_order.checkout_id
+        ORDER BY payment_event.updated_at DESC
+        LIMIT 1
+      ) AS payment_event_status
     FROM lectura_orders AS lectura_order
     WHERE lectura_order.checkout_id = ${checkoutId}::uuid
     LIMIT 1
@@ -350,7 +360,22 @@ export async function readLecturaFulfillment(checkoutId: string): Promise<{
   return {
     serviceId: String(row.service_id),
     paymentStatus: String(row.payment_status),
+    paymentMethod: String(row.payment_method),
     reservationStatus: row.reservation_status ? String(row.reservation_status) : null,
     openIncident: row.open_incident === true || row.open_incident === 't' || row.open_incident === 'true',
+    paymentEventStatus: row.payment_event_status ? String(row.payment_event_status) : null,
   };
+}
+
+export async function readCheckoutServiceId(checkoutId: string): Promise<string | null> {
+  const sql = getDatabase();
+  const rows = await sql`
+    SELECT service_id
+    FROM mercadopago_checkouts
+    WHERE checkout_id = ${checkoutId}::uuid
+    LIMIT 1
+  `;
+
+  const serviceId = rows[0]?.service_id;
+  return typeof serviceId === 'string' && serviceId.length > 0 ? serviceId : null;
 }

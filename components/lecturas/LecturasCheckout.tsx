@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { MercadoPagoLogo } from '@/components/lecturas/MercadoPagoLogo';
 import { createMetaEventId } from '@/lib/meta/event-id';
@@ -107,6 +107,7 @@ export function LecturasCheckout({
   const [email, setEmail] = useState(() => readDraft(serviceId)?.email ?? '');
   const [phone, setPhone] = useState(() => readDraft(serviceId)?.phone ?? '');
   const [paymentMethod, setPaymentMethod] = useState<'mp' | 'cbu'>('mp');
+  const submitLockRef = useRef(false);
   const [dateKey, setDateKey] = useState<string | null>(isCall ? clock.todayKey : null);
   const [hour, setHour] = useState<number | null>(null);
   const [occupied, setOccupied] = useState<Set<string>>(new Set());
@@ -226,13 +227,19 @@ export function LecturasCheckout({
   };
 
   const submit = async (method: 'mp' | 'cbu') => {
-    setNotice('');
-    if (submitting || !validate()) {
+    if (submitLockRef.current) {
       return;
     }
 
+    setNotice('');
+    if (!validate()) {
+      return;
+    }
+
+    submitLockRef.current = true;
     setSubmitting(true);
     const eventId = createMetaEventId();
+    let keepLocked = false;
 
     try {
       const response = await fetch('/api/lecturas/checkout', {
@@ -278,7 +285,13 @@ export function LecturasCheckout({
         } catch {
           // El Pixel no debe frenar el pago.
         }
+        keepLocked = true;
         window.location.href = data.init_point;
+        return;
+      }
+
+      if (method === 'mp') {
+        setNotice('No pudimos iniciar la solicitud.');
         return;
       }
 
@@ -302,7 +315,10 @@ export function LecturasCheckout({
     } catch {
       setNotice('Error de conexión con el servidor.');
     } finally {
-      setSubmitting(false);
+      if (!keepLocked) {
+        submitLockRef.current = false;
+        setSubmitting(false);
+      }
     }
   };
 

@@ -13,12 +13,7 @@ import { createMetaEventId } from '@/lib/meta/event-id';
 import { trackInitiateCheckout, trackViewContent } from '@/lib/meta/pixel';
 import { hasMetaConsent } from '@/lib/meta/consent';
 import { isLecturaServiceId } from '@/lib/lecturas/services';
-import {
-  CALL_PENDING_MESSAGE,
-  CALL_RESCHEDULE_MESSAGE,
-  PAYMENT_RECEIVED_MESSAGE,
-  QUESTION_PENDING_MESSAGE,
-} from '@/lib/lecturas/return-status';
+import { returnMessage, type ReturnService, type ReturnState } from '@/lib/lecturas/return-status';
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -29,7 +24,8 @@ export default function Home() {
   // Estados de Toast
   const [toastMsg, setToastMsg] = useState('');
   const [showToast, setShowToast] = useState(false);
-  const [returnBanner, setReturnBanner] = useState('');
+  const [returnNotice, setReturnNotice] = useState<{ message: string; state: ReturnState } | null>(null);
+  const refreshReturnRef = useRef<(() => void) | null>(null);
 
   // Variantes seleccionadas por categoría
   const [variants, setVariants] = useState({
@@ -160,80 +156,66 @@ export default function Home() {
     const checkoutId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reference)
       ? reference
       : '';
-    let timer = 0;
-    let cancelled = false;
-
-    if (status === 'success') {
-      sessionStorage.removeItem('diter-lectura-draft-v1');
+    const returned = status === 'success' || status === 'failure' || status === 'pending';
+    if (!returned) {
+      return;
     }
 
-    const showTemporary = (message: string) => {
-      if (!message || cancelled) {
-        return;
-      }
-      setReturnBanner('');
-      setToastMsg(message);
-      setShowToast(true);
-      timer = window.setTimeout(() => setShowToast(false), 3000);
-    };
+    let timer = 0;
+    let cancelled = false;
+    let requestId = 0;
+    const waiting = new Set(['processing', 'pending_verification', 'registering', 'unavailable']);
 
-    const showPersistent = (message: string) => {
+    const showReturn = (state: ReturnState, service: ReturnService | null) => {
       if (cancelled) {
         return;
       }
-      window.clearTimeout(timer);
       setShowToast(false);
-      setReturnBanner(message);
-    };
-
-    const fallback =
-      status === 'success'
-        ? PAYMENT_RECEIVED_MESSAGE
-        : status === 'pending'
-          ? 'El pago quedó pendiente de confirmación.'
-          : status === 'failure'
-            ? 'El pago no se completó. Tus preguntas siguen guardadas.'
-            : '';
-
-    const poll = async (attempt: number) => {
-      try {
-        const response = await fetch(`/api/lecturas/fulfillment?checkoutId=${checkoutId}`, { cache: 'no-store' });
-        const data = await response.json() as { fulfillment?: string; service?: string | null };
-        if (cancelled) {
-          return;
-        }
-        if (data.fulfillment === 'reschedule') {
-          showPersistent(CALL_RESCHEDULE_MESSAGE);
-          return;
-        }
-        if (data.fulfillment === 'received' || data.fulfillment === 'unknown') {
-          showTemporary(PAYMENT_RECEIVED_MESSAGE);
-          return;
-        }
-        if (data.fulfillment === 'pending' && attempt < 7) {
-          timer = window.setTimeout(() => {
-            void poll(attempt + 1);
-          }, 2000);
-          return;
-        }
-        if (data.fulfillment === 'pending' && data.service === 'call') {
-          showPersistent(CALL_PENDING_MESSAGE);
-          return;
-        }
-        showTemporary(data.fulfillment === 'pending' ? QUESTION_PENDING_MESSAGE : PAYMENT_RECEIVED_MESSAGE);
-      } catch {
-        showTemporary(PAYMENT_RECEIVED_MESSAGE);
+      setReturnNotice({ message: returnMessage(state, service), state });
+      if (state === 'approved') {
+        sessionStorage.removeItem('diter-lectura-draft-v1');
       }
     };
 
-    if (status === 'success' && checkoutId) {
-      void poll(0);
-    } else if (fallback) {
-      showTemporary(fallback);
-    }
+    const poll = async (attempt: number, id: number) => {
+      if (!checkoutId) {
+        showReturn('unknown', null);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/lecturas/fulfillment?checkoutId=${encodeURIComponent(checkoutId)}`, { cache: 'no-store' });
+        const data = await response.json() as { state?: ReturnState; service?: ReturnService | null };
+        if (cancelled || id !== requestId) {
+          return;
+        }
+        const state = response.ok && data.state ? data.state : 'unavailable';
+        const service = data.service ?? null;
+        showReturn(state, service);
+        if (waiting.has(state) && attempt < 8) {
+          timer = window.setTimeout(() => {
+            void poll(attempt + 1, id);
+          }, 2000);
+        }
+      } catch {
+        if (!cancelled && id === requestId) {
+          showReturn('unavailable', null);
+        }
+      }
+    };
+
+    const start = () => {
+      window.clearTimeout(timer);
+      requestId += 1;
+      void poll(0, requestId);
+    };
+
+    refreshReturnRef.current = start;
+    start();
 
     return () => {
       cancelled = true;
+      refreshReturnRef.current = null;
       window.clearTimeout(timer);
     };
   }, []);
@@ -367,12 +349,33 @@ export default function Home() {
           <i className="fa-solid fa-circle-check text-lg"></i>
           <span>{toastMsg}</span>
         </div>
-        {returnBanner ? (
-          <div role="status" className="fixed top-5 left-1/2 z-50 w-[min(40rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-amber-300 bg-amber-100 px-5 py-4 text-sm font-semibold leading-relaxed text-slate-950 shadow-[0_0_25px_rgba(212,175,55,0.35)]">
-            <p>{returnBanner}</p>
-            <button type="button" onClick={() => setReturnBanner('')} className="mt-3 text-xs font-bold uppercase tracking-wider text-slate-800">
-              Cerrar
-            </button>
+        {returnNotice ? (
+          <div role="status" className={`fixed top-5 left-1/2 z-50 w-[min(40rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border px-5 py-4 text-sm font-semibold leading-relaxed text-slate-950 shadow-[0_0_25px_rgba(212,175,55,0.35)] ${returnNotice.state === 'approved' ? 'border-emerald-300 bg-emerald-100' : returnNotice.state === 'rejected' || returnNotice.state === 'cancelled' ? 'border-rose-300 bg-rose-100' : 'border-amber-300 bg-amber-100'}`}>
+            <p>{returnNotice.message}</p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setReturnNotice(null);
+                  document.getElementById('servicios')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="text-xs font-bold uppercase tracking-wider text-slate-800"
+              >
+                Volver a los servicios
+              </button>
+              {returnNotice.state === 'processing' || returnNotice.state === 'pending_verification' || returnNotice.state === 'registering' || returnNotice.state === 'unavailable' ? (
+                <button
+                  type="button"
+                  onClick={() => refreshReturnRef.current?.()}
+                  className="text-xs font-bold uppercase tracking-wider text-slate-800"
+                >
+                  Actualizar estado
+                </button>
+              ) : null}
+              <button type="button" onClick={() => setReturnNotice(null)} className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Cerrar
+              </button>
+            </div>
           </div>
         ) : null}
 

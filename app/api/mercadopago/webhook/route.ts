@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 
 import { getServiceById } from '@/lib/mercadopago/catalog';
+import { decidePaymentWrite, notificationDisposition, webhookFailureStatus } from '@/lib/mercadopago/webhook-error';
 import { getDatabase } from '@/lib/neon';
 import { sendMetaPurchase } from '@/lib/meta/conversions';
 import { scheduleLecturaQuestionNotice } from '@/lib/lecturas/notifications';
@@ -91,6 +92,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const disposition = notificationDisposition(url.searchParams.get('type'));
+    if (disposition === 'ignore') {
+      return NextResponse.json({ received: true, ignored: true });
+    }
+
+    if (disposition === 'retry') {
+      return NextResponse.json(
+        { error: 'No pudimos confirmar el tipo de notificación.' },
+        { status: 500 }
+      );
+    }
+
     const accessToken = process.env.MP_ACCESS_TOKEN;
 
     if (!accessToken) {
@@ -167,12 +180,17 @@ export async function POST(request: Request) {
     }
 
     const service = getServiceById(checkout.service_id);
+    const writeDecision = decidePaymentWrite({
+      status: payment.status ?? null,
+      externalReference: typeof payment.external_reference === 'string' ? payment.external_reference : null,
+      checkoutFound: true,
+      amount: typeof payment.transaction_amount === 'number' ? payment.transaction_amount : null,
+      currency: typeof payment.currency_id === 'string' ? payment.currency_id : null,
+      catalogAmount: service?.unitPrice ?? null,
+      catalogCurrency: service?.currency ?? null,
+    });
 
-    if (
-      !service ||
-      payment.transaction_amount !== service.unitPrice ||
-      payment.currency_id !== service.currency
-    ) {
+    if (writeDecision !== 'register' || !service || typeof payment.transaction_amount !== 'number') {
       return NextResponse.json(
         {
           error:
@@ -183,6 +201,7 @@ export async function POST(request: Request) {
     }
 
     const confirmedPaymentId = String(payment.id);
+    const confirmedAmount = payment.transaction_amount;
 
     // 5. Registrar el pago sin duplicaciones.
     await sql`
@@ -196,7 +215,7 @@ export async function POST(request: Request) {
       VALUES (
         ${confirmedPaymentId},
         ${service.id},
-        ${payment.transaction_amount},
+        ${confirmedAmount},
         ${service.currency},
         'approved'
       )
@@ -247,7 +266,7 @@ export async function POST(request: Request) {
     try {
       await sendMetaPurchase({
         paymentId: confirmedPaymentId,
-        amount: payment.transaction_amount,
+        amount: confirmedAmount,
         currency: service.currency,
         emailSha256: checkout.email_sha256 ?? undefined,
       });
@@ -293,16 +312,14 @@ export async function POST(request: Request) {
       );
     }
   } catch (error) {
-    console.error(
-      'Error en webhook de Mercado Pago:',
-      error instanceof Error
-        ? error.message
-        : 'Error desconocido'
-    );
+    const status = typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number'
+      ? error.status
+      : 0;
+    console.error(status === 404 ? 'webhook_payment_not_found' : 'webhook_temporary_failure', status || 'unknown');
 
     return NextResponse.json(
       { error: 'Error al procesar la notificación.' },
-      { status: 500 }
+      { status: webhookFailureStatus(error) }
     );
   }
 }
