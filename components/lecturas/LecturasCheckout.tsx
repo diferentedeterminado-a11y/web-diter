@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { BuildingColumnsIcon, CopyIcon } from '@/components/icons';
 import { MercadoPagoLogo } from '@/components/lecturas/MercadoPagoLogo';
 import { createMetaEventId } from '@/lib/meta/event-id';
 import { hasMetaConsent } from '@/lib/meta/consent';
@@ -360,7 +361,7 @@ export function LecturasCheckout({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 backdrop-blur-md sm:items-center sm:px-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 sm:items-center sm:px-4 md:backdrop-blur-md">
       <div className="relative max-h-[100vh] w-full overflow-y-auto rounded-t-3xl border border-amber-500/40 bg-[#140C22] p-5 text-left sm:my-8 sm:max-h-[92vh] sm:max-w-3xl sm:rounded-3xl sm:p-8">
         <button type="button" onClick={onClose} className="absolute right-5 top-5 text-xl text-gray-400 hover:text-amber-400" aria-label="Cerrar">
           ×
@@ -423,7 +424,7 @@ export function LecturasCheckout({
             <span className="text-xs font-bold text-white">Mercado Pago</span>
           </button>
           <button type="button" onClick={() => setPaymentMethod('cbu')} className={`flex flex-col items-center justify-center gap-2 rounded-xl border p-3.5 ${paymentMethod === 'cbu' ? 'border-[#D4AF37] bg-amber-500/15 shadow-[0_0_15px_rgba(212,175,55,0.25)]' : 'border-amber-500/20 bg-[#120C1F]/60'}`}>
-            <i className="fa-solid fa-building-columns text-lg text-amber-400" />
+            <BuildingColumnsIcon className="text-lg text-amber-400" />
             <span className="text-xs font-bold text-white">Transferencia</span>
           </button>
         </div>
@@ -461,7 +462,7 @@ export function LecturasCheckout({
                 <span className="flex items-center gap-2">
                   <span className="break-all text-right font-mono text-amber-300">2850408140096168058568</span>
                   <button type="button" onClick={() => copyBankDetail('2850408140096168058568', 'CVU/CBU')} className="text-amber-400 hover:text-white" aria-label="Copiar CVU/CBU">
-                    <i className="fa-regular fa-copy" />
+                    <CopyIcon />
                   </button>
                 </span>
               </div>
@@ -470,7 +471,7 @@ export function LecturasCheckout({
                 <span className="flex items-center gap-2">
                   <span className="break-all text-right font-mono font-bold text-amber-300">OBEDEZCO.ROSCA.VOCAL</span>
                   <button type="button" onClick={() => copyBankDetail('OBEDEZCO.ROSCA.VOCAL', 'Alias')} className="text-amber-400 hover:text-white" aria-label="Copiar alias">
-                    <i className="fa-regular fa-copy" />
+                    <CopyIcon />
                   </button>
                 </span>
               </div>

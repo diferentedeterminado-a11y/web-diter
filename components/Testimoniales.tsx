@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { StarIcon } from '@/components/icons';
 
 export default function Testimonials() {
   const testimonials = [
@@ -53,7 +54,7 @@ export default function Testimonials() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex gap-1 text-amber-400 text-sm">
                   {[...Array(item.rating)].map((_, i) => (
-                    <i key={i} className="fa-solid fa-star"></i>
+                    <StarIcon key={i} />
                   ))}
                 </div>
                 <span className="text-[10px] text-gray-400 uppercase tracking-wider">{item.date}</span>

@@ -3,7 +3,33 @@ import Testimonials from '@/components/Testimoniales';
 import { LecturasCheckout } from '@/components/lecturas/LecturasCheckout';
 import { MercadoPagoLogo } from '@/components/lecturas/MercadoPagoLogo';
 import React, { useState, useEffect, useRef } from 'react';
-import Script from 'next/script';
+import {
+  AnkhIcon,
+  ArrowRightIcon,
+  BarsIcon,
+  BoltIcon,
+  BuildingColumnsIcon,
+  CalendarCheckIcon,
+  CircleCheckIcon,
+  CircleInfoIcon,
+  CompassIcon,
+  CopyIcon,
+  CreditCardIcon,
+  EyeIcon,
+  FireIcon,
+  HeartPulseIcon,
+  LockIcon,
+  MoonIcon,
+  PhoneVolumeIcon,
+  ShieldCatIcon,
+  ShieldHalvedIcon,
+  SpinnerIcon,
+  StarIcon,
+  UserShieldIcon,
+  WandIcon,
+  WhatsAppIcon,
+  XMarkIcon,
+} from '@/components/icons';
 import {
   LECTURA_SERVICES,
   LIMPIEZA_SERVICES,
@@ -73,7 +99,9 @@ export default function Home() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let animationFrameId: number;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const smallScreen = window.matchMedia('(max-width: 767px)');
+    let frameId = 0;
     let stars: Array<{
       x: number;
       y: number;
@@ -85,13 +113,10 @@ export default function Home() {
       vy: number;
     }> = [];
 
-    // Reducir la cantidad de partículas en móviles para mejorar FPS
-    const isMobile = window.innerWidth < 768;
-    const starCount = isMobile ? 40 : 90;
-
-    const resizeCanvas = () => {
+    const createStars = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      const starCount = smallScreen.matches ? 40 : 90;
       stars = [];
       for (let i = 0; i < starCount; i++) {
         stars.push({
@@ -107,23 +132,21 @@ export default function Home() {
       }
     };
 
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-
-    const animateStars = () => {
+    const paint = (moving: boolean) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       stars.forEach((star) => {
-        star.alpha += star.speed;
-        if (star.alpha > 1 || star.alpha < 0) {
-          star.speed = -star.speed;
+        if (moving) {
+          star.alpha += star.speed;
+          if (star.alpha > 1 || star.alpha < 0) {
+            star.speed = -star.speed;
+          }
+          star.x += star.vx;
+          star.y += star.vy;
+          if (star.x < 0) star.x = canvas.width;
+          if (star.x > canvas.width) star.x = 0;
+          if (star.y < 0) star.y = canvas.height;
+          if (star.y > canvas.height) star.y = 0;
         }
-        star.x += star.vx;
-        star.y += star.vy;
-
-        if (star.x < 0) star.x = canvas.width;
-        if (star.x > canvas.width) star.x = 0;
-        if (star.y < 0) star.y = canvas.height;
-        if (star.y > canvas.height) star.y = 0;
 
         ctx.beginPath();
         ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
@@ -131,15 +154,55 @@ export default function Home() {
         ctx.globalAlpha = Math.abs(star.alpha);
         ctx.fill();
       });
-
-      animationFrameId = requestAnimationFrame(animateStars);
+      ctx.globalAlpha = 1;
     };
 
-    animateStars();
+    const shouldMove = () =>
+      !reducedMotion.matches && !smallScreen.matches && document.visibilityState === 'visible';
+
+    const stop = () => {
+      if (frameId) {
+        cancelAnimationFrame(frameId);
+        frameId = 0;
+      }
+    };
+
+    const tick = () => {
+      if (!shouldMove()) {
+        stop();
+        return;
+      }
+      paint(true);
+      frameId = requestAnimationFrame(tick);
+    };
+
+    const sync = () => {
+      stop();
+      if (shouldMove()) {
+        tick();
+        return;
+      }
+      paint(false);
+    };
+
+    const onResize = () => {
+      createStars();
+      sync();
+    };
+
+    createStars();
+    sync();
+    window.addEventListener('resize', onResize);
+    document.addEventListener('visibilitychange', sync);
+    reducedMotion.addEventListener('change', sync);
+    smallScreen.addEventListener('change', onResize);
 
     return () => {
-      window.removeEventListener('resize', resizeCanvas);
-      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('visibilitychange', sync);
+      reducedMotion.removeEventListener('change', sync);
+      smallScreen.removeEventListener('change', onResize);
+      stop();
     };
   }, []);
 
@@ -333,12 +396,6 @@ export default function Home() {
 
   return (
     <>
-      {/* Carga Asíncrona de FontAwesome sin bloquear el render inicial */}
-      <Script
-        src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"
-        strategy="lazyOnload"
-      />
-
       <div className="relative min-h-screen bg-[#0B0813] text-[#E2E8F0] font-sans overflow-x-hidden selection:bg-purple-900 selection:text-amber-200">
         {/* Toast Notification */}
         <div
@@ -346,7 +403,7 @@ export default function Home() {
             showToast ? 'translate-y-0 opacity-100' : '-translate-y-20 opacity-0'
           }`}
         >
-          <i className="fa-solid fa-circle-check text-lg"></i>
+          <CircleCheckIcon className="text-lg" />
           <span>{toastMsg}</span>
         </div>
         {returnNotice ? (
@@ -383,17 +440,17 @@ export default function Home() {
         <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full pointer-events-none z-0" />
 
         {/* Ambient Orbs */}
-        <div className="fixed top-1/4 left-10 w-72 md:w-96 h-72 md:h-96 bg-purple-900/15 rounded-full blur-[100px] pointer-events-none z-0" />
-        <div className="fixed bottom-1/3 right-10 w-72 md:w-96 h-72 md:h-96 bg-amber-600/10 rounded-full blur-[120px] pointer-events-none z-0" />
+        <div className="fixed top-1/4 left-10 hidden h-96 w-96 rounded-full bg-purple-900/15 blur-[100px] pointer-events-none z-0 md:block" />
+        <div className="fixed bottom-1/3 right-10 hidden h-96 w-96 rounded-full bg-amber-600/10 blur-[120px] pointer-events-none z-0 md:block" />
 
         <div className="relative z-10 flex flex-col min-h-screen">
           {/* HEADER */}
-          <header className="sticky top-0 z-40 backdrop-blur-md bg-[#0B0813]/80 border-b border-amber-500/20">
+          <header className="sticky top-0 z-40 bg-[#0B0813]/80 border-b border-amber-500/20 md:backdrop-blur-md">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
               <a href="#" className="flex items-center gap-3 group">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-600 via-purple-600 to-amber-300 p-[1px] flex items-center justify-center shadow-[0_0_25px_rgba(212,175,55,0.35)]">
                   <div className="w-full h-full bg-[#0B0813] rounded-full flex items-center justify-center">
-                    <i className="fa-solid fa-eye text-amber-400 text-lg"></i>
+                    <EyeIcon className="text-amber-400 text-lg" />
                   </div>
                 </div>
                 <div className="flex flex-col">
@@ -418,7 +475,7 @@ export default function Home() {
                   href="#servicios"
                   className="bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-5 py-2.5 rounded-full text-xs uppercase font-semibold flex items-center gap-2 shadow-[0_4px_15px_rgba(212,175,55,0.3)] transition"
                 >
-                  <i className="fa-solid fa-wand-magic-sparkles text-sm"></i>
+                  <WandIcon className="text-sm" />
                   <span>Reservar Turno</span>
                 </a>
               </div>
@@ -427,13 +484,13 @@ export default function Home() {
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden text-amber-400 text-2xl p-2 focus:outline-none"
               >
-                <i className={`fa-solid ${mobileMenuOpen ? 'fa-xmark' : 'fa-bars'}`}></i>
+                {mobileMenuOpen ? <XMarkIcon /> : <BarsIcon />}
               </button>
             </div>
 
             {/* Menú Móvil */}
             {mobileMenuOpen && (
-              <div className="md:hidden bg-[#120C1F]/95 backdrop-blur-xl border-b border-amber-500/20 px-6 py-6">
+              <div className="md:hidden bg-[#120C1F]/95 border-b border-amber-500/20 px-6 py-6">
                 <nav className="flex flex-col gap-4 text-center font-serif text-lg tracking-widest">
                   <a href="#hero" onClick={() => setMobileMenuOpen(false)} className="text-gray-200 hover:text-amber-400 py-2">Inicio</a>
                   <a href="#servicios" onClick={() => setMobileMenuOpen(false)} className="text-gray-200 hover:text-amber-400 py-2">Servicios Espirituales</a>
@@ -447,7 +504,7 @@ export default function Home() {
 
           {/* HERO SECTION */}
           <section id="hero" className="relative pt-10 pb-16 md:pt-24 md:pb-32 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex flex-col items-center text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-amber-500/30 bg-purple-950/40 backdrop-blur-md mb-6 md:mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-amber-500/30 bg-purple-950/40 mb-6 md:mb-8 md:backdrop-blur-md">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
               <span className="text-xs font-medium tracking-widest text-amber-200 uppercase">
                 Guía Espiritual & Sanación Alto Grado
@@ -472,14 +529,14 @@ export default function Home() {
                 href="#servicios"
                 className="bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-8 py-4 rounded-xl text-sm font-bold tracking-widest uppercase flex items-center justify-center gap-3 shadow-[0_4px_15px_rgba(212,175,55,0.3)] transition"
               >
-                <i className="fa-solid fa-compass text-lg"></i>
+                <CompassIcon className="text-lg" />
                 <span>Explorar Servicios</span>
               </a>
               <a
                 href="#nosotros"
                 className="border border-[#D4AF37] text-[#F5D77F] hover:bg-amber-500/10 px-8 py-4 rounded-xl text-sm font-bold tracking-widest uppercase flex items-center justify-center gap-3 transition"
               >
-                <i className="fa-solid fa-ankh text-lg"></i>
+                <AnkhIcon className="text-lg" />
                 <span>Conoce Sobre Nosotros </span>
               </a>
             </div>
@@ -487,7 +544,7 @@ export default function Home() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-12 md:mt-16 w-full max-w-4xl border-t border-amber-500/20 pt-8 md:pt-10 text-left">
               <div className="flex items-center gap-4 p-3 rounded-lg bg-purple-950/20 border border-purple-800/30">
                 <div className="text-amber-400 text-2xl w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-user-shield"></i>
+                  <UserShieldIcon />
                 </div>
                 <div>
                   <h4 className="font-serif font-bold text-amber-200 text-sm">Confidencialidad 100%</h4>
@@ -497,7 +554,7 @@ export default function Home() {
 
               <div className="flex items-center gap-4 p-3 rounded-lg bg-purple-950/20 border border-purple-800/30">
                 <div className="text-amber-400 text-2xl w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-star"></i>
+                  <StarIcon />
                 </div>
                 <div>
                   <h4 className="font-serif font-bold text-amber-200 text-sm">+10 Años de Experiencia</h4>
@@ -507,7 +564,7 @@ export default function Home() {
 
               <div className="flex items-center gap-4 p-3 rounded-lg bg-purple-950/20 border border-purple-800/30">
                 <div className="text-amber-400 text-2xl w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-credit-card"></i>
+                  <CreditCardIcon />
                 </div>
                 <div>
                   <h4 className="font-serif font-bold text-amber-200 text-sm">Múltiples Pagos</h4>
@@ -537,7 +594,7 @@ export default function Home() {
                       <h4 className="font-serif text-2xl font-bold text-white mt-1">Lecturas y Videncias</h4>
                     </div>
                     <div className="w-12 h-12 rounded-xl bg-purple-900/40 border border-amber-500/30 flex items-center justify-center text-amber-400 text-2xl shrink-0">
-                      <i className="fa-solid fa-eye"></i>
+                      <EyeIcon />
                     </div>
                   </div>
 
@@ -586,7 +643,7 @@ export default function Home() {
                     className="w-full sm:w-auto bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-6 py-3 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2"
                   >
                     <span>Continuar con mi lectura</span>
-                    <i className="fa-solid fa-arrow-right"></i>
+                    <ArrowRightIcon />
                   </button>
                 </div>
               </div>
@@ -600,7 +657,7 @@ export default function Home() {
                       <h4 className="font-serif text-2xl font-bold text-white mt-1">Limpiezas Energéticas</h4>
                     </div>
                     <div className="w-12 h-12 rounded-xl bg-purple-900/40 border border-amber-500/30 flex items-center justify-center text-amber-400 text-2xl shrink-0">
-                      <i className="fa-solid fa-fire-flame-curved"></i>
+                      <FireIcon />
                     </div>
                   </div>
 
@@ -653,7 +710,7 @@ export default function Home() {
                     className="w-full sm:w-auto bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-6 py-3 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2"
                   >
                     <span>Reservar Turno / Comprar</span>
-                    <i className="fa-solid fa-arrow-right"></i>
+                    <ArrowRightIcon />
                   </button>
                 </div>
               </div>
@@ -667,7 +724,7 @@ export default function Home() {
                       <h4 className="font-serif text-2xl font-bold text-white mt-1">Amarres de Amor</h4>
                     </div>
                     <div className="w-12 h-12 rounded-xl bg-purple-900/40 border border-amber-500/30 flex items-center justify-center text-amber-400 text-2xl shrink-0">
-                      <i className="fa-solid fa-heart-pulse"></i>
+                      <HeartPulseIcon />
                     </div>
                   </div>
 
@@ -676,7 +733,7 @@ export default function Home() {
                   </p>
 
                   <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6 text-xs text-amber-200 flex gap-3 items-center">
-                    <i className="fa-solid fa-circle-info text-amber-400 text-lg shrink-0"></i>
+                    <CircleInfoIcon className="text-amber-400 text-lg shrink-0" />
                     <span>Incluye análisis de fotos, compatibilidad astral y dictamen de viabilidad del trabajo.</span>
                   </div>
                 </div>
@@ -698,7 +755,7 @@ export default function Home() {
                     className="w-full sm:w-auto bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-6 py-3 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2"
                   >
                     <span>Agendar Consulta Previa</span>
-                    <i className="fa-solid fa-calendar-check"></i>
+                    <CalendarCheckIcon />
                   </button>
                 </div>
               </div>
@@ -712,7 +769,7 @@ export default function Home() {
                       <h4 className="font-serif text-2xl font-bold text-white mt-1">Exorcismos y Liberación</h4>
                     </div>
                     <div className="w-12 h-12 rounded-xl bg-purple-900/40 border border-amber-500/30 flex items-center justify-center text-amber-400 text-2xl shrink-0">
-                      <i className="fa-solid fa-shield-halved"></i>
+                      <ShieldHalvedIcon />
                     </div>
                   </div>
 
@@ -721,7 +778,7 @@ export default function Home() {
                   </p>
 
                   <div className="bg-purple-900/30 border border-purple-500/30 rounded-xl p-4 mb-6 text-xs text-purple-200 flex gap-3 items-center">
-                    <i className="fa-solid fa-lock text-amber-400 text-lg shrink-0"></i>
+                    <LockIcon className="text-amber-400 text-lg shrink-0" />
                     <span>Máxima privacidad garantizada bajo juramento de confidencialidad eclesial/mística.</span>
                   </div>
                 </div>
@@ -743,7 +800,7 @@ export default function Home() {
                     className="w-full sm:w-auto bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] hover:from-[#F5D77F] hover:to-[#D4AF37] px-6 py-3 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2"
                   >
                     <span>Solicitar Evaluación</span>
-                    <i className="fa-solid fa-phone-volume"></i>
+                    <PhoneVolumeIcon />
                   </button>
                 </div>
               </div>
@@ -779,9 +836,9 @@ export default function Home() {
 
                 <div className="relative flex justify-center items-center">
                   <div className="w-56 h-56 sm:w-80 sm:h-80 rounded-full border-2 border-dashed border-amber-500/40 flex items-center justify-center p-4">
-                    <div className="w-full h-full rounded-full border border-purple-500/40 flex items-center justify-center bg-purple-950/30 backdrop-blur-md">
+                    <div className="w-full h-full rounded-full border border-purple-500/40 flex items-center justify-center bg-purple-950/30 md:backdrop-blur-md">
                       <div className="text-center p-6">
-                        <i className="fa-solid fa-moon text-4xl sm:text-5xl text-amber-300 mb-4 block"></i>
+                        <MoonIcon className="text-4xl sm:text-5xl text-amber-300 mb-4 block" />
                         <span className="font-serif text-base sm:text-lg font-bold text-white uppercase block">Grupo Diter</span>
                         <span className="text-xs text-amber-200/80 italic">{'"Luz donde reina la sombra"'}</span>
                       </div>
@@ -804,18 +861,18 @@ export default function Home() {
 
           {/* MODAL CHECKOUT EXTENDED */}
           {modalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/85 backdrop-blur-md">
+            <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/85 md:backdrop-blur-md">
               <div className="bg-[#140C22] w-full max-w-xl rounded-3xl p-6 sm:p-8 relative border border-amber-500/40 text-left my-8 max-h-[92vh] overflow-y-auto">
                 <button
                   onClick={() => setModalOpen(false)}
                   className="absolute top-5 right-5 text-gray-400 hover:text-amber-400 text-xl"
                 >
-                  <i className="fa-solid fa-xmark"></i>
+                  <XMarkIcon />
                 </button>
 
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-400/40 flex items-center justify-center text-amber-400 shrink-0">
-                    <i className="fa-solid fa-shield-cat"></i>
+                    <ShieldCatIcon />
                   </div>
                   <div>
                     <h3 className="font-serif text-xl font-bold text-white">Checkout de Reserva Espiritual</h3>
@@ -905,7 +962,7 @@ export default function Home() {
                           : 'border-amber-500/20 bg-[#120C1F]/60'
                       }`}
                     >
-                      <i className="fa-solid fa-building-columns text-amber-400 text-lg"></i>
+                      <BuildingColumnsIcon className="text-amber-400 text-lg" />
                       <span className="text-xs font-bold text-white leading-tight">Transferencia</span>
                     </button>
                   </div>
@@ -915,7 +972,7 @@ export default function Home() {
                 {currentPaymentMethod === 'mp' && (
                   <div className="bg-sky-950/30 border border-sky-500/30 rounded-2xl p-4 text-xs text-sky-100">
                     <div className="flex items-center gap-2 mb-2 text-sky-400 font-bold">
-                      <i className="fa-solid fa-shield-halved"></i>
+                      <ShieldHalvedIcon />
                       <span>Pago procesado por Mercado Pago</span>
                     </div>
                     <p className="text-gray-300 font-light text-[11px] leading-relaxed mb-4">
@@ -930,12 +987,12 @@ export default function Home() {
                     >
                       {loadingMp ? (
                         <>
-                          <i className="fa-solid fa-spinner animate-spin"></i>
+                          <SpinnerIcon />
                           <span>Generando preferencia de pago...</span>
                         </>
                       ) : (
                         <>
-                          <i className="fa-solid fa-lock text-sm"></i>
+                          <LockIcon className="text-sm" />
                           <span>Pagar ahora con Mercado Pago</span>
                         </>
                       )}
@@ -965,7 +1022,7 @@ export default function Home() {
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-amber-300 break-all text-right">2850408140096168058568</span>
                           <button type="button" onClick={() => copyToClipboard('2850408140096168058568', 'CVU/CBU')} className="text-amber-400 hover:text-white" aria-label="Copiar CVU/CBU">
-                            <i className="fa-regular fa-copy"></i>
+                            <CopyIcon />
                           </button>
                         </div>
                       </div>
@@ -974,7 +1031,7 @@ export default function Home() {
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold text-amber-300 break-all text-right">OBEDEZCO.ROSCA.VOCAL</span>
                           <button type="button" onClick={() => copyToClipboard('OBEDEZCO.ROSCA.VOCAL', 'ALIAS')} className="text-amber-400 hover:text-white" aria-label="Copiar alias">
-                            <i className="fa-regular fa-copy"></i>
+                            <CopyIcon />
                           </button>
                         </div>
                       </div>
@@ -985,7 +1042,7 @@ export default function Home() {
                       onClick={() => confirmBookingViaWhatsApp('Transferencia Bancaria (CBU / ALIAS)')}
                       className="w-full bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#0B0813] py-3.5 rounded-xl text-xs uppercase font-bold tracking-wider flex items-center justify-center gap-2 mt-4"
                     >
-                      <i className="fa-brands fa-whatsapp text-lg"></i>
+                      <WhatsAppIcon className="text-lg" />
                       <span>Enviar Comprobante por WhatsApp</span>
                     </button>
                   </div>
@@ -1002,7 +1059,7 @@ export default function Home() {
             className="fixed bottom-6 right-6 z-40 group flex items-center"
           >
             <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-600 via-green-500 to-emerald-300 flex items-center justify-center text-white text-2xl shadow-[0_0_25px_rgba(212,175,55,0.35)] transition-transform duration-300 group-hover:scale-110 relative">
-              <i className="fa-brands fa-whatsapp"></i>
+              <WhatsAppIcon />
             </div>
           </a>
 
@@ -1011,7 +1068,7 @@ export default function Home() {
             <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
               <div className="md:col-span-2">
                 <div className="flex items-center gap-3 mb-4">
-                  <i className="fa-solid fa-eye text-amber-400 text-xl"></i>
+                  <EyeIcon className="text-amber-400 text-xl" />
                   <span className="font-serif text-xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-[#FFF099] via-[#D4AF37] to-[#AA7C11] uppercase">
                     Grupo Diter
                   </span>
@@ -1035,8 +1092,8 @@ export default function Home() {
               <div>
                 <h4 className="font-serif font-bold text-amber-300 text-sm mb-4 uppercase tracking-wider">Medios de Pago</h4>
                 <ul className="space-y-2 text-xs text-gray-400">
-                  <li className="flex items-center gap-2"><i className="fa-solid fa-bolt text-sky-400"></i> Mercado Pago</li>
-                  <li className="flex items-center gap-2"><i className="fa-solid fa-building-columns text-amber-400"></i> Transferencia CBU / Alias</li>
+                  <li className="flex items-center gap-2"><BoltIcon className="text-sky-400" /> Mercado Pago</li>
+                  <li className="flex items-center gap-2"><BuildingColumnsIcon className="text-amber-400" /> Transferencia CBU / Alias</li>
                 </ul>
               </div>
             </div>

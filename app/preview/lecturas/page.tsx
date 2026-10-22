@@ -309,8 +309,8 @@ export default function LecturasPreviewPage() {
 
   return (
     <div className="relative min-h-screen bg-[#0B0813] text-[#E2E8F0] font-sans selection:bg-purple-900 selection:text-amber-200">
-      <div className="pointer-events-none fixed left-10 top-1/4 h-72 w-72 rounded-full bg-purple-900/20 blur-[100px] md:h-96 md:w-96" />
-      <div className="pointer-events-none fixed bottom-1/4 right-10 h-72 w-72 rounded-full bg-amber-600/10 blur-[120px] md:h-96 md:w-96" />
+      <div className="pointer-events-none fixed left-10 top-1/4 hidden h-96 w-96 rounded-full bg-purple-900/20 blur-[100px] md:block" />
+      <div className="pointer-events-none fixed bottom-1/4 right-10 hidden h-96 w-96 rounded-full bg-amber-600/10 blur-[120px] md:block" />
 
       <div
         className={`fixed right-5 top-5 z-[60] rounded-xl bg-amber-500 px-5 py-3 text-xs font-bold uppercase tracking-wider text-slate-950 shadow-[0_0_25px_rgba(212,175,55,0.35)] transition ${
@@ -423,7 +423,7 @@ export default function LecturasPreviewPage() {
       </div>
 
       {checkoutOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 backdrop-blur-md sm:items-center sm:px-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 sm:items-center sm:px-4 md:backdrop-blur-md">
           <div className="relative my-0 max-h-[100vh] w-full overflow-y-auto rounded-t-3xl border border-amber-500/40 bg-[#140C22] p-5 text-left sm:my-8 sm:max-h-[92vh] sm:max-w-3xl sm:rounded-3xl sm:p-8">
             <button
               type="button"
